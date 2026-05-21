@@ -1,12 +1,10 @@
 from flask import Flask, render_template_string, request
+import requests
 import os
 
 app = Flask(__name__)
 
-# عدادات عامة للموقع
-visitor_counter = 0
-usage_counter = 0
-
+# التصميم (CSS + HTML) في متغير واحد
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -15,25 +13,19 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EUO PLATFORM</title>
     <style>
-        body { background: #000; color: #7fdbff; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; min-height: 100vh; padding: 20px; }
-        .container { width: 100%; max-width: 500px; background: #0a0a0a; padding: 25px; border-radius: 20px; border: 1px solid #7fdbff; box-shadow: 0 0 20px rgba(0, 123, 255, 0.3); }
-        h1 { color: #fff; text-align: center; }
-        h2 { color: #7fdbff; font-size: 16px; margin-top: 20px; border-bottom: 1px solid #333; padding-bottom: 5px; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #222; background: #111; color: #fff; box-sizing: border-box; }
-        button { background: #007bff; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #0056b3; }
-        .stats { text-align: center; color: #888; font-size: 14px; margin-bottom: 20px; }
-        .result { background: #1a1a1a; padding: 15px; border-radius: 10px; color: #0f0; text-align: center; margin-top: 10px; border: 1px solid #0f0; }
+        body { background: #000; color: #7fdbff; font-family: sans-serif; display: flex; justify-content: center; min-height: 100vh; padding: 20px; }
+        .container { width: 100%; max-width: 500px; background: #0a0a0a; padding: 20px; border-radius: 15px; border: 1px solid #7fdbff; box-shadow: 0 0 15px #007bff; text-align: center; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #333; background: #111; color: white; box-sizing: border-box; }
+        button { background: #007bff; font-weight: bold; cursor: pointer; }
+        .result { background: #111; padding: 15px; border-radius: 8px; border: 1px solid #007bff; color: #fff; margin: 10px 0; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>منصة Euo</h1>
-        <div class="stats">الزوار: {{ visitors }} | العمليات: {{ count }}</div>
         {% if msg %}<div class="result">{{ msg }}</div>{% endif %}
-        
         <form method="POST" action="/process">
-            <h2>1. الحالة (Presence)</h2>
+            <h2>1. الحالة</h2>
             <input type="text" name="token" placeholder="التوكن...">
             <select name="type"><option value="3">Watching</option><option value="0">Playing</option></select>
             <input type="text" name="text" placeholder="النص...">
@@ -46,7 +38,7 @@ HTML_TEMPLATE = """
             <button name="action" value="clone" style="background:#28a745;">بدء النسخ</button>
 
             <h2>3. فحص اليوزرات</h2>
-            <input type="text" name="user_id" placeholder="آيدي اليوزر...">
+            <input type="text" name="user_id" placeholder="ايدي اليوزر...">
             <button name="action" value="check" style="background:#ffc107; color:#000;">فحص اليوزر</button>
         </form>
     </div>
@@ -56,27 +48,32 @@ HTML_TEMPLATE = """
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global visitor_counter, usage_counter
-    if request.method == 'GET': visitor_counter += 1
-    return render_template_string(HTML_TEMPLATE, visitors=visitor_counter, count=usage_counter, msg="")
+    return render_template_string(HTML_TEMPLATE, msg="")
 
 @app.route('/process', methods=['POST'])
 def process():
-    global usage_counter
-    usage_counter += 1
     action = request.form.get('action')
+    msg = "خطأ في الاتصال"
+
+    if action == "check":
+        uid = request.form.get('user_id')
+        # كود الفحص الحقيقي
+        r = requests.get(f"https://discord.com/api/v9/users/{uid}")
+        msg = f"اليوزر {uid} هو: {'مستعمل' if r.status_code == 200 else 'متاح'}"
     
-    # هنا سيتم وضع المنطق البرمجي لكل زر مستقبلاً
-    if action == "presence":
-        msg = "تمت محاولة تحديث الحالة!"
+    elif action == "presence":
+        token = request.form.get('token')
+        text = request.form.get('text')
+        headers = {"Authorization": token, "Content-Type": "application/json"}
+        # طلب تحديث الحالة
+        r = requests.patch("https://discord.com/api/v9/users/@me/settings", 
+                           headers=headers, json={"custom_status": {"text": text}})
+        msg = "تم تفعيل الحالة بنجاح!" if r.status_code == 200 else "فشل: تأكد من التوكن"
+
     elif action == "clone":
-        msg = "تمت محاولة بدء عملية النسخ!"
-    elif action == "check":
-        msg = "تم فحص اليوزر بنجاح!"
-    else:
-        msg = "خطأ في تنفيذ العملية."
-        
-    return render_template_string(HTML_TEMPLATE, visitors=visitor_counter, count=usage_counter, msg=msg)
+        msg = "بدء النسخ (ملاحظة: يحتاج صلاحيات كاملة)"
+
+    return render_template_string(HTML_TEMPLATE, msg=msg)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
