@@ -1,54 +1,54 @@
 from flask import Flask, render_template_string, request
-import time, json, threading, os
-import websocket
+import time, threading, os
 
 app = Flask(__name__)
 
-# قاعدة بيانات بسيطة في الذاكرة
-active_sessions = {}
+# بيانات الموقع
 usage_counter = 0
+visitor_counter = 0
+active_sessions = {}
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>EUO BLUE PLATFORM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EUO PLATFORM</title>
     <style>
-        body { background: #001f3f; color: #7fdbff; font-family: 'Segoe UI', sans-serif; padding: 20px; text-align: center; }
-        .container { max-width: 600px; margin: auto; background: #003366; padding: 25px; border-radius: 15px; border: 2px solid #7fdbff; box-shadow: 0 0 20px #0074d9; }
-        h1 { color: #7fdbff; text-shadow: 0 0 10px #7fdbff; }
-        .dev-info { font-size: 14px; color: #ffffff; margin-bottom: 20px; }
-        .privacy { font-size: 12px; color: #ffdc00; margin-bottom: 20px; }
-        input, select, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #7fdbff; background: #001f3f; color: white; box-sizing: border-box; }
-        button { background: #0074d9; color: white; font-weight: bold; cursor: pointer; }
-        .counter { font-size: 18px; color: #ffffff; margin: 20px 0; }
-        li { background: #00274d; margin: 5px 0; padding: 10px; border-radius: 5px; border-right: 4px solid #7fdbff; display: flex; justify-content: space-between; }
+        body { background-color: #000; color: #7fdbff; font-family: sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { width: 90%; max-width: 450px; background-color: #0d0d0d; padding: 25px; border-radius: 15px; border: 1px solid #7fdbff; box-shadow: 0 0 15px #007bff; text-align: center; }
+        h1 { color: #fff; margin-bottom: 5px; }
+        .dev-info { font-size: 13px; color: #555; margin-bottom: 20px; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: white; box-sizing: border-box; }
+        button { background: #007bff; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .stats { font-size: 14px; color: #888; margin: 15px 0; }
+        li { background: #111; margin: 5px 0; padding: 10px; border-radius: 5px; border-right: 3px solid #007bff; text-align: right; font-size: 13px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>منصة Euo الزرقاء 💙</h1>
+        <h1>منصة Euo</h1>
         <p class="dev-info">تم التطوير بواسطة Euo</p>
-        <p class="privacy">🔒 نضمن لكم خصوصية تامة - لا يتم تخزين التوكنات</p>
         
-        <form method="POST" action="/rich_presence">
-            <input type="text" name="token" placeholder="التوكن الخاص بك..." required>
-            <select name="activity_type">
-                <option value="3">Watching (يشاهد)</option>
-                <option value="0">Playing (يلعب)</option>
-                <option value="2">Listening (يسمع)</option>
+        <form method="POST" action="/process">
+            <input type="text" name="token" placeholder="التوكن..." required>
+            <input type="text" name="input_data" placeholder="ايدي سيرفر / يوزر للفحص...">
+            <select name="action">
+                <option value="presence">تفعيل نشاط</option>
+                <option value="clone">نسخ سيرفر</option>
+                <option value="check_user">فحص يوزرات</option>
             </select>
-            <input type="text" name="activity_name" placeholder="اسم النشاط..." required>
-            <button type="submit">تفعيل الاتصال الأزرق</button>
+            <button type="submit">تفعيل</button>
         </form>
 
-        <div class="counter">عدد التفعيلات الإجمالي: {{ count }}</div>
+        <div class="stats">الزوار: {{ visitors }} | العمليات: {{ count }}</div>
         
-        <h3>الحسابات المتصلة حالياً:</h3>
+        <h3>العمليات النشطة:</h3>
         <ul>
             {% for token, act in sessions.items() %}
-                <li>{{ act }} ✅ <span>(السيرفر شغال)</span></li>
+                <li>{{ act }} ✅</li>
             {% endfor %}
         </ul>
     </div>
@@ -56,31 +56,23 @@ HTML_TEMPLATE = """
 </html>
 """
 
-def discord_gateway_presence(token, act_name, act_type):
-    def on_open(ws):
-        payload = {"op": 2, "d": {"token": token, "properties": {"$os": "linux", "$browser": "discord", "$device": "desktop"},
-                                  "presence": {"activities": [{"name": act_name, "type": act_type}], "status": "online"}}}
-        ws.send(json.dumps(payload))
-    ws = websocket.WebSocketApp("wss://gateway.discord.gg/?v=9&encoding=json", on_open=on_open)
-    ws.run_forever()
-    if token in active_sessions: del active_sessions[token]
-
 @app.route('/')
 def home():
-    return render_template_string(HTML_TEMPLATE, sessions=active_sessions, count=usage_counter)
+    global visitor_counter
+    visitor_counter += 1
+    return render_template_string(HTML_TEMPLATE, sessions=active_sessions, count=usage_counter, visitors=visitor_counter)
 
-@app.route('/rich_presence', methods=['POST'])
-def rich_presence():
+@app.route('/process', methods=['POST'])
+def process():
     global usage_counter
     token = request.form.get('token')
-    act_name = request.form.get('activity_name')
-    act_type = int(request.form.get('activity_type'))
+    data = request.form.get('input_data')
+    action = request.form.get('action')
     
     usage_counter += 1
-    active_sessions[token] = act_name
-    threading.Thread(target=discord_gateway_presence, args=(token, act_name, act_type), daemon=True).start()
+    active_sessions[token] = f"{action.upper()}: {data}"
     
-    return render_template_string(HTML_TEMPLATE, sessions=active_sessions, count=usage_counter)
+    return render_template_string(HTML_TEMPLATE, sessions=active_sessions, count=usage_counter, visitors=visitor_counter)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
