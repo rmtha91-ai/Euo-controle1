@@ -4,43 +4,35 @@ import os
 
 app = Flask(__name__)
 
-# التصميم (CSS + HTML) في متغير واحد
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EUO PLATFORM</title>
     <style>
-        body { background: #000; color: #7fdbff; font-family: sans-serif; display: flex; justify-content: center; min-height: 100vh; padding: 20px; }
-        .container { width: 100%; max-width: 500px; background: #0a0a0a; padding: 20px; border-radius: 15px; border: 1px solid #7fdbff; box-shadow: 0 0 15px #007bff; text-align: center; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #333; background: #111; color: white; box-sizing: border-box; }
-        button { background: #007bff; font-weight: bold; cursor: pointer; }
-        .result { background: #111; padding: 15px; border-radius: 8px; border: 1px solid #007bff; color: #fff; margin: 10px 0; }
+        :root { --neon: #00d4ff; --bg: #050505; }
+        body { background: var(--bg); color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { width: 95%; max-width: 400px; background: #111; padding: 30px; border-radius: 20px; border: 1px solid #333; box-shadow: 0 0 20px rgba(0, 212, 255, 0.1); text-align: center; }
+        h1 { color: var(--neon); margin-bottom: 30px; letter-spacing: 2px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #222; background: #1a1a1a; color: #fff; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: none; background: linear-gradient(90deg, #007bff, #00d4ff); color: #fff; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { opacity: 0.9; transform: translateY(-2px); }
+        .res { padding: 15px; margin: 15px 0; border-radius: 10px; background: #000; border: 1px solid var(--neon); color: var(--neon); font-size: 14px; }
+        .footer { margin-top: 25px; color: #444; font-size: 11px; letter-spacing: 1px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>منصة Euo</h1>
-        {% if msg %}<div class="result">{{ msg }}</div>{% endif %}
+        <h1>EUO SYSTEM</h1>
+        {% if msg %}<div class="res">{{ msg }}</div>{% endif %}
         <form method="POST" action="/process">
-            <h2>1. الحالة</h2>
-            <input type="text" name="token" placeholder="التوكن...">
-            <select name="type"><option value="3">Watching</option><option value="0">Playing</option></select>
-            <input type="text" name="text" placeholder="النص...">
+            <input type="text" name="token" placeholder="التوكن..." required>
+            <input type="text" name="data" placeholder="النص أو كود الدعوة...">
             <button name="action" value="presence">تفعيل الحالة</button>
-
-            <h2>2. نسخ السيرفرات</h2>
-            <input type="text" name="token_clone" placeholder="التوكن...">
-            <input type="text" name="src" placeholder="آيدي المصدر...">
-            <input type="text" name="tgt" placeholder="آيدي الهدف...">
-            <button name="action" value="clone" style="background:#28a745;">بدء النسخ</button>
-
-            <h2>3. فحص اليوزرات</h2>
-            <input type="text" name="user_id" placeholder="ايدي اليوزر...">
-            <button name="action" value="check" style="background:#ffc107; color:#000;">فحص اليوزر</button>
+            <button name="action" value="join" style="background: linear-gradient(90deg, #28a745, #00ff88);">دخول سيرفر</button>
         </form>
+        <div class="footer">تم البرمجة بواسطة EUO</div>
     </div>
 </body>
 </html>
@@ -48,31 +40,25 @@ HTML_TEMPLATE = """
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template_string(HTML_TEMPLATE, msg="")
+    return render_template_string(HTML_TEMPLATE)
 
 @app.route('/process', methods=['POST'])
 def process():
     action = request.form.get('action')
-    msg = "خطأ في الاتصال"
-
-    if action == "check":
-        uid = request.form.get('user_id')
-        # كود الفحص الحقيقي
-        r = requests.get(f"https://discord.com/api/v9/users/{uid}")
-        msg = f"اليوزر {uid} هو: {'مستعمل' if r.status_code == 200 else 'متاح'}"
+    token = request.form.get('token')
+    data = request.form.get('data')
     
-    elif action == "presence":
-        token = request.form.get('token')
-        text = request.form.get('text')
-        headers = {"Authorization": token, "Content-Type": "application/json"}
-        # طلب تحديث الحالة
-        r = requests.patch("https://discord.com/api/v9/users/@me/settings", 
-                           headers=headers, json={"custom_status": {"text": text}})
-        msg = "تم تفعيل الحالة بنجاح!" if r.status_code == 200 else "فشل: تأكد من التوكن"
-
-    elif action == "clone":
-        msg = "بدء النسخ (ملاحظة: يحتاج صلاحيات كاملة)"
-
+    headers = {"Authorization": token, "Content-Type": "application/json"}
+    
+    if action == "presence":
+        r = requests.patch("https://discord.com/api/v9/users/@me/settings", headers=headers, json={"custom_status": {"text": data}})
+        msg = "✅ تم تحديث الحالة" if r.status_code == 200 else "❌ فشل تحديث الحالة"
+    
+    elif action == "join":
+        invite = data.split('/')[-1]
+        r = requests.post(f"https://discord.com/api/v9/invites/{invite}", headers=headers)
+        msg = "✅ تم الدخول بنجاح" if r.status_code == 200 else "❌ فشل الدخول"
+        
     return render_template_string(HTML_TEMPLATE, msg=msg)
 
 if __name__ == "__main__":
